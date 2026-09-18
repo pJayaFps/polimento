@@ -1,28 +1,676 @@
-const VEHICLES={"H6":{models:["HEV ONE","HEV2","PHEV19","PHEV35","GT"],colors:{GT:["Preto Hematita","Cinza Diamante","Azul Cianita","Branco Ágata","Vermelho Granada","Cinza Amazonita","Cinza Titânio"],default:["Cinza Diamante","Branco Ágata","Preto Hematita","Azul Topázio","Marrom Citrino","Vermelho Granada","Azul Cianita","Cinza Titânio","Cinza Amazonita"]}},"H9":{models:[],colors:{default:["Preto Khalifa","Grafite Zenit","Branco Noronha","Branco Ágata","Preto Hematita","Cinza Titânio","Cinza Diamante"]}},"WEY 07":{models:[],colors:{default:["Preto Khalifa","Branco Pérola","Azul Cianita","Verde Turmalina","Verde Esmeralda","Solar Gold"]}},"TANK 300":{models:[],colors:{default:["Preto Khalifa","Cinza Dakar","Vermelho Brava","Laranja Saara","Branco Noronha"]}},"ORA 05":{models:[],colors:{default:[]}},"ORA 03":{models:["GT"],colors:{GT:["Preto Hematita","Branco Ágata","Vermelho Brava","Cinza Amazonita"],default:["Preto Hematita","Branco Ágata","Vermelho Brava","Azul Copacabana"]}},"POER":{models:[],colors:{default:["Preto Khalifa","Prata Lunar","Branco Noronha","Cinza Diamante","Cinza Titânio","Branco Ágata"]}}};
-const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)]; let all=[],report=[];const today=()=>new Date().toISOString().slice(0,10); const local=d=>d?d.split('-').reverse().join('/'):'';
-async function api(url,opts={}){const r=await fetch(url,{headers:{'Content-Type':'application/json',...(opts.headers||{})},...opts});if(!r.ok){const j=await r.json().catch(()=>({}));throw Error(j.error||'Não foi possível concluir a operação.')}const data=r.status===204?null:await r.json();if(data?.pendente)window.pendingApproval=true;if(url==='/api/login'&&data?.user)applyUser(data.user);return data}
-function options(el,arr,placeholder,selected=''){el.innerHTML=`<option value="">${placeholder}</option>`+arr.map(x=>`<option ${x===selected?'selected':''}>${x}</option>`).join('')+`<option value="OUTRO" ${selected==='OUTRO'?'selected':''}>OUTRO</option>`}
-function getPeriod(k){let d=new Date(),start,end;if(k==='today')start=end=today();else if(k==='week'){let n=d.getDay()||7;d.setDate(d.getDate()-n+1);start=d.toISOString().slice(0,10);end=today()}else if(k==='lastmonth'){d=new Date(d.getFullYear(),d.getMonth(),0);end=d.toISOString().slice(0,10);start=new Date(d.getFullYear(),d.getMonth(),1).toISOString().slice(0,10)}else if(k==='month'){start=new Date(d.getFullYear(),d.getMonth(),1).toISOString().slice(0,10);end=today()}return {inicio:start,fim:end}}
-function query(obj){return new URLSearchParams(Object.entries(obj).filter(([,v])=>v)).toString()}
-function row(r,actions=false){return `<tr><td>${local(r.data)}<small> ${r.hora}</small></td><td>${r.chassi}</td><td><b>${r.carro}</b></td><td>${r.modelo}</td><td>${r.cor}</td><td><span class="badge ${r.tipo_polimento}">${r.tipo_polimento}</span></td>${actions?`<td class="actions"><button class="icon-btn" data-view="${r.id}">◉</button><button class="icon-btn" data-edit="${r.id}">✎</button><button class="icon-btn delete" data-delete="${r.id}">×</button></td>`:''}</tr>`}
-function toast(m,bad=false){if(window.pendingApproval&&!bad){m='Solicitação enviada para aprovação do Líder.';window.pendingApproval=false}let t=$('#toast');t.textContent=(bad?'⚠ ':'✓ ')+m;t.style.background=bad?'#b83b3b':'#12684e';t.style.display='block';setTimeout(()=>t.style.display='none',3500)}
-async function loadDashboard(){let month=getPeriod('month'),[m,t,recent]=await Promise.all([api('/api/polimentos/estatisticas?'+query(month)),api('/api/polimentos/estatisticas?'+query(getPeriod('today'))),api('/api/polimentos')]);$('#todayTotal').textContent=t.total;$('#monthTotal').textContent=m.total;$('#completeTotal').textContent=m.completos;$('#partialTotal').textContent=m.parciais;$('#recentRows').innerHTML=recent.slice(0,10).map(r=>`<tr><td>${local(r.data)}</td><td><b>${r.carro}</b><small> · ${r.modelo}</small></td><td>${r.chassi}</td><td><span class="badge ${r.tipo_polimento}">${r.tipo_polimento}</span></td></tr>`).join('')||'<tr><td colspan="4">Nenhum registro ainda.</td></tr>';let max=Math.max(...m.porCarro.map(x=>x.quantidade),1);$('#vehicleStats').innerHTML=m.porCarro.map(x=>`<div class="stat"><span>${x.nome}</span><div class="bar"><i style="width:${x.quantidade/max*100}%"></i></div><b>${x.quantidade}</b></div>`).join('')||'<p>Sem dados no período.</p>'}
-function formCar(){options($('#carro'),Object.keys(VEHICLES),'Selecione o carro');}
-function updateModel(selected=''){let car=$('#carro').value,vs=VEHICLES[car],withoutModel=vs&&!vs.models.length;$('#modelo').closest('label').hidden=withoutModel;if(withoutModel){$('#modelo').innerHTML='<option value="Não se aplica">Não se aplica</option>';$('#modelo').value='Não se aplica';$('#modeloOutroWrap').hidden=true;updateColor();return}options($('#modelo'),vs?.models||[],'Selecione ou digite',selected);$('#modeloOutroWrap').hidden=selected!=='OUTRO';updateColor();}
-function updateColor(selected=''){let car=$('#carro').value,model=$('#modelo').value,vs=VEHICLES[car];options($('#cor'),vs?.colors?.[model]||vs?.colors?.default||[],'Selecione ou digite',selected);$('#corOutroWrap').hidden=selected!=='OUTRO'}
-function value(id,other){return $(id).value==='OUTRO'?$(other).value.trim():$(id).value}
-function openForm(r=null){let d=new Date();$('#polimentoForm').reset();formCar();$('#data').value=r?.data||today();$('#hora').value=r?.hora||d.toTimeString().slice(0,5);$('#editId').value=r?.id||'';$('#formTitle').textContent=r?'Editar polimento':'Cadastrar polimento';$('#formEyebrow').textContent=r?'ATUALIZAR REGISTRO':'NOVO REGISTRO';$('#saveBtn').textContent=r?'ATUALIZAR POLIMENTO →':'SALVAR POLIMENTO →';if(r){let carKnown=VEHICLES[r.carro];$('#carro').value=carKnown?r.carro:'OUTRO';$('#carroOutroWrap').hidden=!!carKnown;if(!carKnown)$('#carroOutro').value=r.carro;updateModel(carKnown&&VEHICLES[r.carro].models.includes(r.modelo)?r.modelo:'OUTRO');if($('#modelo').value==='OUTRO')$('#modeloOutro').value=r.modelo;let cols=carKnown?(VEHICLES[r.carro].colors[$('#modelo').value]||VEHICLES[r.carro].colors.default||[]):[];updateColor(cols.includes(r.cor)?r.cor:'OUTRO');if($('#cor').value==='OUTRO')$('#corOutro').value=r.cor;$('#chassi').value=r.chassi;$('#observacoes').value=r.observacoes||'';$('#responsavel').value=r.responsavel||'';$('#'+r.tipo_polimento.toLowerCase()).checked=true}else updateModel();$('#modal').showModal();$('#chassi').focus()}
-async function loadHistory(){let q={...getPeriod($('#period').value),carro:$('#filterCar').value,modelo:$('#filterModel').value,cor:$('#filterColor').value,tipo_polimento:$('#filterType').value,chassi:$('#filterChassi').value};if($('#period').value==='all')q={...q,inicio:'',fim:''};if($('#period').value==='custom'){q.inicio=$('#start').value;q.fim=$('#end').value}all=await api('/api/polimentos?'+query(q));$('#historyRows').innerHTML=all.map(r=>row(r,true)).join('')||'<tr><td colspan="7">Nenhum registro encontrado.</td></tr>'}
-function colorsFor(car,model=''){let c=VEHICLES[car]?.colors||{};return [...new Set(model?(c[model]||c.default||[]):Object.values(c).flat())]}
-function setFilterOptions(){options($('#filterCar'),Object.keys(VEHICLES),'Todos os carros');}
-async function loadReport(){let m=$('#reportMonth').value||today().slice(0,7),d=new Date(m+'-01T12:00:00'),s=new Date(d.getFullYear(),d.getMonth(),1).toISOString().slice(0,10),e=new Date(d.getFullYear(),d.getMonth()+1,0).toISOString().slice(0,10);report=await api('/api/polimentos?'+query({inicio:s,fim:e}));let c=report.filter(r=>r.tipo_polimento==='COMPLETO').length;$('#reportTotal').textContent=report.length;$('#reportComplete').textContent=c;$('#reportPartial').textContent=report.length-c;$('#reportRows').innerHTML=report.map(r=>row(r)).join('')||'<tr><td colspan="6">Nenhum polimento neste mês.</td></tr>';$('#reportLabel').textContent=d.toLocaleDateString('pt-BR',{month:'long',year:'numeric'});return {inicio:s,fim:e,label:$('#reportLabel').textContent}}
-function showPage(id){$$('.page').forEach(s=>s.classList.toggle('active',s.id===id));$$('[data-page]').forEach(a=>a.classList.toggle('active',a.dataset.page===id));$('#pageTitle').textContent=id==='aprovacoes'?'Aprovações':id==='backup'?'Administração':id==='historico'?'Histórico de polimentos':id==='relatorio'?'Relatório mensal':'Dashboard';if(id==='aprovacoes')loadApprovals();window.scrollTo(0,0)}
-function applyUser(u){$('#login').hidden=true;$('#app').hidden=false;$('#userName').textContent=u.nome;const canManage=u.papel==='lider';$$('[data-page="backup"]').forEach(el=>el.hidden=!canManage);$('#backup').hidden=!canManage;if(canManage&&!$('#approvalsNav')){$('aside nav').insertAdjacentHTML('beforeend','<a id="approvalsNav" data-page="aprovacoes">✓ <b>Aprovações</b></a>');$('.bottom').insertAdjacentHTML('beforeend','<a id="approvalsBottom" data-page="aprovacoes">✓<small>Aprovações</small></a>');$('.content').insertAdjacentHTML('beforeend','<section id="aprovacoes" class="page"><div class="section-head"><div><span>VALIDAÇÃO</span><h2>Aprovações pendentes</h2></div></div><div class="panel table-wrap"><table><thead><tr><th>Solicitado por</th><th>Ação</th><th>Veículo</th><th>Data</th><th>Ações</th></tr></thead><tbody id="approvalRows"></tbody></table></div></section>');$('#approvalsNav').onclick=()=>showPage('aprovacoes');$('#approvalsBottom').onclick=()=>showPage('aprovacoes');}}
-function approvalChanges(s){let p=s.dados||{},old=s.atual||{},fields=[['Data','data'],['Hora','hora'],['Chassi','chassi'],['Carro','carro'],['Modelo / versão','modelo'],['Cor','cor'],['Tipo de polimento','tipo_polimento'],['Observações','observacoes'],['Responsável','responsavel']];if(s.acao==='CRIAR')return fields.map(([n,k])=>`${n}: ${p[k]||'—'}`).join('\n');if(s.acao==='EXCLUIR')return fields.map(([n,k])=>`${n}: ${old[k]||'—'}`).join('\n');return fields.filter(([,k])=>(old[k]||'')!==(p[k]||'')).map(([n,k])=>`${n}\n  Antes: ${old[k]||'—'}\n  Depois: ${p[k]||'—'}`).join('\n\n')||'Nenhuma alteração identificada.'}
-function approvalModal(s){let d=$('#approvalDialog');if(!d){document.body.insertAdjacentHTML('beforeend','<dialog id="approvalDialog" class="details-dialog"><h2 id="approvalTitle"></h2><p id="approvalMeta" class="approval-meta"></p><pre id="approvalChanges"></pre><div class="modal-actions"><button class="outline" id="approvalCancel">Cancelar</button><button class="danger" id="approvalReject">RECUSAR</button><button class="primary" id="approvalAccept">APROVAR</button></div></dialog>');d=$('#approvalDialog');$('#approvalCancel').onclick=()=>d.close()}$('#approvalTitle').textContent=`Solicitação: ${s.acao}`;$('#approvalMeta').textContent=`Solicitado por ${s.solicitante_nome} em ${new Date(s.criado_em).toLocaleString('pt-BR')}`;$('#approvalChanges').textContent=approvalChanges(s);$('#approvalAccept').onclick=()=>decideApproval(s.id,'aprovar',d);$('#approvalReject').onclick=()=>decideApproval(s.id,'rejeitar',d);d.showModal()}
-async function decideApproval(id,decision,dialog){try{await api(`/api/polimentos/solicitacoes/${id}/${decision}`,{method:'POST',body:'{}'});dialog.close();toast(decision==='aprovar'?'Solicitação aprovada e aplicada no banco.':'Solicitação recusada.');loadApprovals();loadDashboard()}catch(err){toast(err.message,true)}}
-async function loadApprovals(){let rs=await api('/api/polimentos/solicitacoes');window.pendingApprovals=rs;$('#approvalRows').innerHTML=rs.map(s=>{let p=s.dados||{},v=s.acao==='EXCLUIR'?`${s.atual?.carro||'Registro'} · ${s.atual?.chassi||'#'+s.polimento_id}`:`${p.carro||'—'} · ${p.chassi||'—'}`;return `<tr><td>${s.solicitante_nome}</td><td><b>${s.acao}</b></td><td>${v}</td><td>${new Date(s.criado_em).toLocaleString('pt-BR')}</td><td class="actions"><button class="icon-btn" data-review="${s.id}">VER E DECIDIR</button></td></tr>`}).join('')||'<tr><td colspan="5">Não há solicitações pendentes.</td></tr>';$('#approvalRows').onclick=e=>{let b=e.target.closest('button');if(!b)return;let s=window.pendingApprovals.find(x=>x.id==b.dataset.review);if(s)approvalModal(s)}}
-function systemDetails(text){let d=$('#systemDetails');if(!d){document.body.insertAdjacentHTML('beforeend','<dialog id="systemDetails" class="details-dialog"><div id="systemDetailsText"></div><div class="modal-actions"><button class="primary" id="closeDetails">FECHAR</button></div></dialog>');d=$('#systemDetails');$('#closeDetails').onclick=()=>d.close()}$('#systemDetailsText').textContent=text;d.showModal()}
-window.alert=systemDetails;
-async function enter(){try{let u=await api('/api/me');applyUser(u);await loadDashboard()}catch{}}
-document.addEventListener('DOMContentLoaded',()=>{formCar();setFilterOptions();$('#reportMonth').value=today().slice(0,7);enter();$('#loginForm').onsubmit=async e=>{e.preventDefault();try{let u=await api('/api/login',{method:'POST',body:JSON.stringify({usuario:$('#usuario').value,senha:$('#senha').value})});$('#login').hidden=true;$('#app').hidden=false;$('#userName').textContent=u.user.nome;loadDashboard()}catch(e){toast(e.message,true)}};$$('[data-page]').forEach(x=>x.onclick=()=>{let p=x.dataset.page;$$('.page').forEach(s=>s.classList.toggle('active',s.id===p));$$('[data-page]').forEach(a=>a.classList.toggle('active',a.dataset.page===p));$('#pageTitle').textContent={dashboard:'Dashboard',historico:'Histórico de polimentos',relatorio:'Relatório mensal',backup:'Administração'}[p];if(p==='historico')loadHistory();if(p==='relatorio')loadReport();window.scrollTo(0,0)});$$('.new').forEach(b=>b.onclick=()=>openForm());$$('.close').forEach(b=>b.onclick=()=>$('#modal').close());$('.logout').onclick=async()=>{await api('/api/logout',{method:'POST'});location.reload()};$('#carro').onchange=()=>{let other=$('#carro').value==='OUTRO';$('#carroOutroWrap').hidden=!other;updateModel()};$('#modelo').onchange=()=>{$('#modeloOutroWrap').hidden=$('#modelo').value!=='OUTRO';updateColor()};$('#cor').onchange=()=>$('#corOutroWrap').hidden=$('#cor').value!=='OUTRO';$('#polimentoForm').onsubmit=async e=>{e.preventDefault();let id=$('#editId').value,p={data:$('#data').value,hora:$('#hora').value,chassi:$('#chassi').value,carro:value('#carro','#carroOutro'),modelo:value('#modelo','#modeloOutro'),cor:value('#cor','#corOutro'),tipo_polimento:document.querySelector('[name=tipo]:checked')?.value,observacoes:$('#observacoes').value,responsavel:$('#responsavel').value};try{await api('/api/polimentos'+(id?'/'+id:''),{method:id?'PUT':'POST',body:JSON.stringify(p)});toast(id?'Polimento atualizado com sucesso!':'Polimento cadastrado com sucesso!');$('#modal').close();loadDashboard();if($('#historico').classList.contains('active'))loadHistory();if($('#relatorio').classList.contains('active'))loadReport()}catch(e){toast(e.message,true)}};['period','filterCar','filterModel','filterColor','filterType','filterChassi','start','end'].forEach(id=>$('#'+id).addEventListener(id==='filterChassi'?'input':'change',()=>{let c=$('#filterCar').value;if(id==='filterCar'){options($('#filterModel'),VEHICLES[c]?.models||[],'Todos os modelos');options($('#filterColor'),colorsFor(c),'Todas as cores')}if(id==='filterModel')options($('#filterColor'),colorsFor(c,$('#filterModel').value),'Todas as cores');loadHistory()}));$('#historyRows').onclick=async e=>{let b=e.target.closest('button');if(!b)return;let id=b.dataset.edit||b.dataset.view||b.dataset.delete,r=all.find(x=>x.id==id);if(b.dataset.edit)openForm(r);else if(b.dataset.view)alert(`DETALHES\n\n${r.carro} — ${r.modelo}\nChassi: ${r.chassi}\nCor: ${r.cor}\nTipo: ${r.tipo_polimento}\nData: ${local(r.data)} ${r.hora}\n\nObservações: ${r.observacoes||'—'}\nResponsável: ${r.responsavel||'—'}`);else if(confirm('Excluir este registro de polimento? Esta ação não pode ser desfeita.'))try{await api('/api/polimentos/'+id,{method:'DELETE'});toast('Registro excluído.');loadHistory();loadDashboard()}catch(e){toast(e.message,true)}};$('#quickChassi').oninput=async e=>{let v=e.target.value.trim();if(v.length<2)return;let rs=await api('/api/polimentos?chassi='+encodeURIComponent(v));$('#recentRows').innerHTML=rs.slice(0,10).map(r=>`<tr><td>${local(r.data)}</td><td><b>${r.carro}</b><small> · ${r.modelo}</small></td><td>${r.chassi}</td><td><span class="badge ${r.tipo_polimento}">${r.tipo_polimento}</span></td></tr>`).join('')||'<tr><td colspan="4">Nenhum chassi encontrado.</td></tr>'};$('#quickClear').onclick=()=>{$('#quickChassi').value='';loadDashboard()};$('#reportMonth').onchange=loadReport;$('#exportPdf').onclick=async()=>{let q=await loadReport();window.open('/api/polimentos/export/pdf?'+query(q),'_blank')};$('#exportExcel').onclick=async()=>{let q=await loadReport();window.location='/api/polimentos/export/excel?'+query(q)};$('#copyReport').onclick=async()=>{let q=await loadReport(),lines=['RELATÓRIO DE POLIMENTOS',`Período: ${q.label}`, ''];report.forEach((r,i)=>lines.push(`${i+1}. ${r.carro} — ${r.modelo}\n   Chassi: ${r.chassi}\n   Cor: ${r.cor}\n   Polimento: ${r.tipo_polimento==='COMPLETO'?'Completo':'Parcial'}\n`));let c=report.filter(r=>r.tipo_polimento==='COMPLETO').length;lines.push('---',`TOTAL: ${report.length}`,`COMPLETOS: ${c}`,`PARCIAIS: ${report.length-c}`);try{await navigator.clipboard.writeText(lines.join('\n'));toast('Relatório copiado para o WhatsApp!')}catch{toast('Não foi possível copiar.',true)}};$('#restoreBtn').onclick=async()=>{let f=$('#restoreFile').files[0];if(!f)return toast('Selecione um arquivo de backup.',true);if(!confirm('Restaurar este backup e substituir os dados atuais?'))return;let fd=new FormData();fd.append('backup',f);let r=await fetch('/api/restaurar',{method:'POST',body:fd}),j=await r.json();r.ok?toast(j.warning):toast(j.error,true)}});
+const VEHICLES = {
+  H6: {
+    models: ["HEV ONE", "HEV2", "PHEV19", "PHEV35", "GT"],
+    colors: {
+      GT: [
+        "Preto Hematita",
+        "Cinza Diamante",
+        "Azul Cianita",
+        "Branco Ágata",
+        "Vermelho Granada",
+        "Cinza Amazonita",
+        "Cinza Titânio",
+      ],
+      default: [
+        "Cinza Diamante",
+        "Branco Ágata",
+        "Preto Hematita",
+        "Azul Topázio",
+        "Marrom Citrino",
+        "Vermelho Granada",
+        "Azul Cianita",
+        "Cinza Titânio",
+        "Cinza Amazonita",
+      ],
+    },
+  },
+  H9: {
+    models: [],
+    colors: {
+      default: [
+        "Preto Khalifa",
+        "Grafite Zenit",
+        "Branco Noronha",
+        "Branco Ágata",
+        "Preto Hematita",
+        "Cinza Titânio",
+        "Cinza Diamante",
+      ],
+    },
+  },
+  "WEY 07": {
+    models: [],
+    colors: {
+      default: [
+        "Preto Khalifa",
+        "Branco Pérola",
+        "Azul Cianita",
+        "Verde Turmalina",
+        "Verde Esmeralda",
+        "Solar Gold",
+      ],
+    },
+  },
+  "TANK 300": {
+    models: [],
+    colors: {
+      default: [
+        "Preto Khalifa",
+        "Cinza Dakar",
+        "Vermelho Brava",
+        "Laranja Saara",
+        "Branco Noronha",
+      ],
+    },
+  },
+  "ORA 05": { models: [], colors: { default: [] } },
+  "ORA 03": {
+    models: ["GT"],
+    colors: {
+      GT: [
+        "Preto Hematita",
+        "Branco Ágata",
+        "Vermelho Brava",
+        "Cinza Amazonita",
+      ],
+      default: [
+        "Preto Hematita",
+        "Branco Ágata",
+        "Vermelho Brava",
+        "Azul Copacabana",
+      ],
+    },
+  },
+  POER: {
+    models: [],
+    colors: {
+      default: [
+        "Preto Khalifa",
+        "Prata Lunar",
+        "Branco Noronha",
+        "Cinza Diamante",
+        "Cinza Titânio",
+        "Branco Ágata",
+      ],
+    },
+  },
+};
+const $ = (s) => document.querySelector(s),
+  $$ = (s) => [...document.querySelectorAll(s)];
+let all = [],
+  report = [];
+const today = () => new Date().toISOString().slice(0, 10);
+const local = (d) => (d ? d.split("-").reverse().join("/") : "");
+async function api(url, opts = {}) {
+  const r = await fetch(url, {
+    headers: { "Content-Type": "application/json", ...(opts.headers || {}) },
+    ...opts,
+  });
+  if (!r.ok) {
+    const j = await r.json().catch(() => ({}));
+    throw Error(j.error || "Não foi possível concluir a operação.");
+  }
+  const data = r.status === 204 ? null : await r.json();
+  if (data?.pendente) window.pendingApproval = true;
+  if (url === "/api/login" && data?.user) applyUser(data.user);
+  return data;
+}
+function options(el, arr, placeholder, selected = "") {
+  el.innerHTML =
+    `<option value="">${placeholder}</option>` +
+    arr
+      .map((x) => `<option ${x === selected ? "selected" : ""}>${x}</option>`)
+      .join("") +
+    `<option value="OUTRO" ${selected === "OUTRO" ? "selected" : ""}>OUTRO</option>`;
+}
+function getPeriod(k) {
+  let d = new Date(),
+    start,
+    end;
+  if (k === "today") start = end = today();
+  else if (k === "week") {
+    let n = d.getDay() || 7;
+    d.setDate(d.getDate() - n + 1);
+    start = d.toISOString().slice(0, 10);
+    end = today();
+  } else if (k === "lastmonth") {
+    d = new Date(d.getFullYear(), d.getMonth(), 0);
+    end = d.toISOString().slice(0, 10);
+    start = new Date(d.getFullYear(), d.getMonth(), 1)
+      .toISOString()
+      .slice(0, 10);
+  } else if (k === "month") {
+    start = new Date(d.getFullYear(), d.getMonth(), 1)
+      .toISOString()
+      .slice(0, 10);
+    end = today();
+  }
+  return { inicio: start, fim: end };
+}
+function query(obj) {
+  return new URLSearchParams(
+    Object.entries(obj).filter(([, v]) => v),
+  ).toString();
+}
+function row(r, actions = false) {
+  return `<tr><td>${local(r.data)}<small> ${r.hora}</small></td><td>${r.chassi}</td><td><b>${r.carro}</b></td><td>${r.modelo}</td><td>${r.cor}</td><td><span class="badge ${r.tipo_polimento}">${r.tipo_polimento}</span></td>${actions ? `<td class="actions"><button class="icon-btn" data-view="${r.id}">◉</button><button class="icon-btn" data-edit="${r.id}">✎</button><button class="icon-btn delete" data-delete="${r.id}">×</button></td>` : ""}</tr>`;
+}
+function toast(m, bad = false) {
+  if (window.pendingApproval && !bad) {
+    m = "Solicitação enviada para aprovação do Líder.";
+    window.pendingApproval = false;
+  }
+  let t = $("#toast");
+  t.textContent = (bad ? "⚠ " : "✓ ") + m;
+  t.style.background = bad ? "#b83b3b" : "#12684e";
+  t.style.display = "block";
+  setTimeout(() => (t.style.display = "none"), 3500);
+}
+async function loadDashboard() {
+  let month = getPeriod("month"),
+    [m, t, recent] = await Promise.all([
+      api("/api/polimentos/estatisticas?" + query(month)),
+      api("/api/polimentos/estatisticas?" + query(getPeriod("today"))),
+      api("/api/polimentos"),
+    ]);
+  $("#todayTotal").textContent = t.total;
+  $("#monthTotal").textContent = m.total;
+  $("#completeTotal").textContent = m.completos;
+  $("#partialTotal").textContent = m.parciais;
+  $("#recentRows").innerHTML =
+    recent
+      .slice(0, 10)
+      .map(
+        (r) =>
+          `<tr><td>${local(r.data)}</td><td><b>${r.carro}</b><small> · ${r.modelo}</small></td><td>${r.chassi}</td><td><span class="badge ${r.tipo_polimento}">${r.tipo_polimento}</span></td></tr>`,
+      )
+      .join("") || '<tr><td colspan="4">Nenhum registro ainda.</td></tr>';
+  let max = Math.max(...m.porCarro.map((x) => x.quantidade), 1);
+  $("#vehicleStats").innerHTML =
+    m.porCarro
+      .map(
+        (x) =>
+          `<div class="stat"><span>${x.nome}</span><div class="bar"><i style="width:${(x.quantidade / max) * 100}%"></i></div><b>${x.quantidade}</b></div>`,
+      )
+      .join("") || "<p>Sem dados no período.</p>";
+}
+function formCar() {
+  options($("#carro"), Object.keys(VEHICLES), "Selecione o carro");
+}
+function updateModel(selected = "") {
+  let car = $("#carro").value,
+    vs = VEHICLES[car],
+    withoutModel = vs && !vs.models.length;
+  $("#modelo").closest("label").hidden = withoutModel;
+  if (withoutModel) {
+    $("#modelo").innerHTML =
+      '<option value="Não se aplica">Não se aplica</option>';
+    $("#modelo").value = "Não se aplica";
+    $("#modeloOutroWrap").hidden = true;
+    updateColor();
+    return;
+  }
+  options($("#modelo"), vs?.models || [], "Selecione ou digite", selected);
+  $("#modeloOutroWrap").hidden = selected !== "OUTRO";
+  updateColor();
+}
+function updateColor(selected = "") {
+  let car = $("#carro").value,
+    model = $("#modelo").value,
+    vs = VEHICLES[car];
+  options(
+    $("#cor"),
+    vs?.colors?.[model] || vs?.colors?.default || [],
+    "Selecione ou digite",
+    selected,
+  );
+  $("#corOutroWrap").hidden = selected !== "OUTRO";
+}
+function value(id, other) {
+  return $(id).value === "OUTRO" ? $(other).value.trim() : $(id).value;
+}
+function openForm(r = null) {
+  let d = new Date();
+  $("#polimentoForm").reset();
+  formCar();
+  $("#data").value = r?.data || today();
+  $("#hora").value = r?.hora || d.toTimeString().slice(0, 5);
+  $("#editId").value = r?.id || "";
+  $("#formTitle").textContent = r ? "Editar polimento" : "Cadastrar polimento";
+  $("#formEyebrow").textContent = r ? "ATUALIZAR REGISTRO" : "NOVO REGISTRO";
+  $("#saveBtn").textContent = r
+    ? "ATUALIZAR POLIMENTO →"
+    : "SALVAR POLIMENTO →";
+  if (r) {
+    let carKnown = VEHICLES[r.carro];
+    $("#carro").value = carKnown ? r.carro : "OUTRO";
+    $("#carroOutroWrap").hidden = !!carKnown;
+    if (!carKnown) $("#carroOutro").value = r.carro;
+    updateModel(
+      carKnown && VEHICLES[r.carro].models.includes(r.modelo)
+        ? r.modelo
+        : "OUTRO",
+    );
+    if ($("#modelo").value === "OUTRO") $("#modeloOutro").value = r.modelo;
+    let cols = carKnown
+      ? VEHICLES[r.carro].colors[$("#modelo").value] ||
+        VEHICLES[r.carro].colors.default ||
+        []
+      : [];
+    updateColor(cols.includes(r.cor) ? r.cor : "OUTRO");
+    if ($("#cor").value === "OUTRO") $("#corOutro").value = r.cor;
+    $("#chassi").value = r.chassi;
+    $("#observacoes").value = r.observacoes || "";
+    $("#responsavel").value = r.responsavel || "";
+    $("#" + r.tipo_polimento.toLowerCase()).checked = true;
+  } else updateModel();
+  $("#modal").showModal();
+  $("#chassi").focus();
+}
+async function loadHistory() {
+  let q = {
+    ...getPeriod($("#period").value),
+    carro: $("#filterCar").value,
+    modelo: $("#filterModel").value,
+    cor: $("#filterColor").value,
+    tipo_polimento: $("#filterType").value,
+    chassi: $("#filterChassi").value,
+  };
+  if ($("#period").value === "all") q = { ...q, inicio: "", fim: "" };
+  if ($("#period").value === "custom") {
+    q.inicio = $("#start").value;
+    q.fim = $("#end").value;
+  }
+  all = await api("/api/polimentos?" + query(q));
+  $("#historyRows").innerHTML =
+    all.map((r) => row(r, true)).join("") ||
+    '<tr><td colspan="7">Nenhum registro encontrado.</td></tr>';
+}
+function colorsFor(car, model = "") {
+  let c = VEHICLES[car]?.colors || {};
+  return [
+    ...new Set(model ? c[model] || c.default || [] : Object.values(c).flat()),
+  ];
+}
+function setFilterOptions() {
+  options($("#filterCar"), Object.keys(VEHICLES), "Todos os carros");
+}
+async function loadReport() {
+  let m = $("#reportMonth").value || today().slice(0, 7),
+    d = new Date(m + "-01T12:00:00"),
+    s = new Date(d.getFullYear(), d.getMonth(), 1).toISOString().slice(0, 10),
+    e = new Date(d.getFullYear(), d.getMonth() + 1, 0)
+      .toISOString()
+      .slice(0, 10);
+  report = await api("/api/polimentos?" + query({ inicio: s, fim: e }));
+  let c = report.filter((r) => r.tipo_polimento === "COMPLETO").length;
+  $("#reportTotal").textContent = report.length;
+  $("#reportComplete").textContent = c;
+  $("#reportPartial").textContent = report.length - c;
+  $("#reportRows").innerHTML =
+    report.map((r) => row(r)).join("") ||
+    '<tr><td colspan="6">Nenhum polimento neste mês.</td></tr>';
+  $("#reportLabel").textContent = d.toLocaleDateString("pt-BR", {
+    month: "long",
+    year: "numeric",
+  });
+  return { inicio: s, fim: e, label: $("#reportLabel").textContent };
+}
+function showPage(id) {
+  $$(".page").forEach((s) => s.classList.toggle("active", s.id === id));
+  $$("[data-page]").forEach((a) =>
+    a.classList.toggle("active", a.dataset.page === id),
+  );
+  $("#pageTitle").textContent =
+    id === "aprovacoes"
+      ? "Aprovações"
+      : id === "backup"
+        ? "Administração"
+        : id === "historico"
+          ? "Histórico de polimentos"
+          : id === "relatorio"
+            ? "Relatório mensal"
+            : "Dashboard";
+  if (id === "aprovacoes") loadApprovals();
+  window.scrollTo(0, 0);
+}
+function applyUser(u) {
+  $("#login").hidden = true;
+  $("#app").hidden = false;
+  $("#userName").textContent = u.nome;
+  const canManage = u.papel === "lider";
+  $$('[data-page="backup"]').forEach((el) => (el.hidden = !canManage));
+  $("#backup").hidden = !canManage;
+  if (canManage && !$("#approvalsNav")) {
+    $("aside nav").insertAdjacentHTML(
+      "beforeend",
+      '<a id="approvalsNav" data-page="aprovacoes">✓ <b>Aprovações</b></a>',
+    );
+    $(".bottom").insertAdjacentHTML(
+      "beforeend",
+      '<a id="approvalsBottom" data-page="aprovacoes">✓<small>Aprovações</small></a>',
+    );
+    $(".content").insertAdjacentHTML(
+      "beforeend",
+      '<section id="aprovacoes" class="page"><div class="section-head"><div><span>VALIDAÇÃO</span><h2>Aprovações pendentes</h2></div></div><div class="panel table-wrap"><table><thead><tr><th>Solicitado por</th><th>Ação</th><th>Veículo</th><th>Data</th><th>Ações</th></tr></thead><tbody id="approvalRows"></tbody></table></div></section>',
+    );
+    $("#approvalsNav").onclick = () => showPage("aprovacoes");
+    $("#approvalsBottom").onclick = () => showPage("aprovacoes");
+  }
+}
+function approvalChanges(s) {
+  let p = s.dados || {},
+    old = s.atual || {},
+    fields = [
+      ["Data", "data"],
+      ["Hora", "hora"],
+      ["Chassi", "chassi"],
+      ["Carro", "carro"],
+      ["Modelo / versão", "modelo"],
+      ["Cor", "cor"],
+      ["Tipo de polimento", "tipo_polimento"],
+      ["Observações", "observacoes"],
+      ["Responsável", "responsavel"],
+    ];
+  if (s.acao === "CRIAR")
+    return fields.map(([n, k]) => `${n}: ${p[k] || "—"}`).join("\n");
+  if (s.acao === "EXCLUIR")
+    return fields.map(([n, k]) => `${n}: ${old[k] || "—"}`).join("\n");
+  return (
+    fields
+      .filter(([, k]) => (old[k] || "") !== (p[k] || ""))
+      .map(
+        ([n, k]) => `${n}\n  Antes: ${old[k] || "—"}\n  Depois: ${p[k] || "—"}`,
+      )
+      .join("\n\n") || "Nenhuma alteração identificada."
+  );
+}
+function approvalModal(s) {
+  let d = $("#approvalDialog");
+  if (!d) {
+    document.body.insertAdjacentHTML(
+      "beforeend",
+      '<dialog id="approvalDialog" class="details-dialog"><h2 id="approvalTitle"></h2><p id="approvalMeta" class="approval-meta"></p><pre id="approvalChanges"></pre><div class="modal-actions"><button class="outline" id="approvalCancel">Cancelar</button><button class="danger" id="approvalReject">RECUSAR</button><button class="primary" id="approvalAccept">APROVAR</button></div></dialog>',
+    );
+    d = $("#approvalDialog");
+    $("#approvalCancel").onclick = () => d.close();
+  }
+  $("#approvalTitle").textContent = `Solicitação: ${s.acao}`;
+  $("#approvalMeta").textContent =
+    `Solicitado por ${s.solicitante_nome} em ${new Date(s.criado_em).toLocaleString("pt-BR")}`;
+  $("#approvalChanges").textContent = approvalChanges(s);
+  $("#approvalAccept").onclick = () => decideApproval(s.id, "aprovar", d);
+  $("#approvalReject").onclick = () => decideApproval(s.id, "rejeitar", d);
+  d.showModal();
+}
+async function decideApproval(id, decision, dialog) {
+  try {
+    await api(`/api/polimentos/solicitacoes/${id}/${decision}`, {
+      method: "POST",
+      body: "{}",
+    });
+    dialog.close();
+    toast(
+      decision === "aprovar"
+        ? "Solicitação aprovada e aplicada no banco."
+        : "Solicitação recusada.",
+    );
+    loadApprovals();
+    loadDashboard();
+  } catch (err) {
+    toast(err.message, true);
+  }
+}
+async function loadApprovals() {
+  let rs = await api("/api/polimentos/solicitacoes");
+  window.pendingApprovals = rs;
+  $("#approvalRows").innerHTML =
+    rs
+      .map((s) => {
+        let p = s.dados || {},
+          v =
+            s.acao === "EXCLUIR"
+              ? `${s.atual?.carro || "Registro"} · ${s.atual?.chassi || "#" + s.polimento_id}`
+              : `${p.carro || "—"} · ${p.chassi || "—"}`;
+        return `<tr><td>${s.solicitante_nome}</td><td><b>${s.acao}</b></td><td>${v}</td><td>${new Date(s.criado_em).toLocaleString("pt-BR")}</td><td class="actions"><button class="icon-btn" data-review="${s.id}">VER E DECIDIR</button></td></tr>`;
+      })
+      .join("") ||
+    '<tr><td colspan="5">Não há solicitações pendentes.</td></tr>';
+  $("#approvalRows").onclick = (e) => {
+    let b = e.target.closest("button");
+    if (!b) return;
+    let s = window.pendingApprovals.find((x) => x.id == b.dataset.review);
+    if (s) approvalModal(s);
+  };
+}
+function systemDetails(text) {
+  let d = $("#systemDetails");
+  if (!d) {
+    document.body.insertAdjacentHTML(
+      "beforeend",
+      '<dialog id="systemDetails" class="details-dialog"><div id="systemDetailsText"></div><div class="modal-actions"><button class="primary" id="closeDetails">FECHAR</button></div></dialog>',
+    );
+    d = $("#systemDetails");
+    $("#closeDetails").onclick = () => d.close();
+  }
+  $("#systemDetailsText").textContent = text;
+  d.showModal();
+}
+window.alert = systemDetails;
+async function enter() {
+  try {
+    let u = await api("/api/me");
+    applyUser(u);
+    await loadDashboard();
+  } catch {}
+}
+document.addEventListener("DOMContentLoaded", () => {
+  formCar();
+  setFilterOptions();
+  $("#reportMonth").value = today().slice(0, 7);
+  enter();
+  $("#loginForm").onsubmit = async (e) => {
+    e.preventDefault();
+    try {
+      let u = await api("/api/login", {
+        method: "POST",
+        body: JSON.stringify({
+          usuario: $("#usuario").value,
+          senha: $("#senha").value,
+        }),
+      });
+      $("#login").hidden = true;
+      $("#app").hidden = false;
+      $("#userName").textContent = u.user.nome;
+      loadDashboard();
+    } catch (e) {
+      toast(e.message, true);
+    }
+  };
+  $$("[data-page]").forEach(
+    (x) =>
+      (x.onclick = () => {
+        let p = x.dataset.page;
+        $$(".page").forEach((s) => s.classList.toggle("active", s.id === p));
+        $$("[data-page]").forEach((a) =>
+          a.classList.toggle("active", a.dataset.page === p),
+        );
+        $("#pageTitle").textContent = {
+          dashboard: "Dashboard",
+          historico: "Histórico de polimentos",
+          relatorio: "Relatório mensal",
+          backup: "Administração",
+        }[p];
+        if (p === "historico") loadHistory();
+        if (p === "relatorio") loadReport();
+        window.scrollTo(0, 0);
+      }),
+  );
+  $$(".new").forEach((b) => (b.onclick = () => openForm()));
+  $$(".close").forEach((b) => (b.onclick = () => $("#modal").close()));
+  $(".logout").onclick = async () => {
+    await api("/api/logout", { method: "POST" });
+    location.reload();
+  };
+  $('.mobile-logout').onclick = async () => {
+    await api('/api/logout', { method: 'POST' });
+    location.reload();
+};
+  $("#carro").onchange = () => {
+    let other = $("#carro").value === "OUTRO";
+    $("#carroOutroWrap").hidden = !other;
+    updateModel();
+  };
+  $("#modelo").onchange = () => {
+    $("#modeloOutroWrap").hidden = $("#modelo").value !== "OUTRO";
+    updateColor();
+  };
+  $("#cor").onchange = () =>
+    ($("#corOutroWrap").hidden = $("#cor").value !== "OUTRO");
+  $("#polimentoForm").onsubmit = async (e) => {
+    e.preventDefault();
+    let id = $("#editId").value,
+      p = {
+        data: $("#data").value,
+        hora: $("#hora").value,
+        chassi: $("#chassi").value,
+        carro: value("#carro", "#carroOutro"),
+        modelo: value("#modelo", "#modeloOutro"),
+        cor: value("#cor", "#corOutro"),
+        tipo_polimento: document.querySelector("[name=tipo]:checked")?.value,
+        observacoes: $("#observacoes").value,
+        responsavel: $("#responsavel").value,
+      };
+    try {
+      await api("/api/polimentos" + (id ? "/" + id : ""), {
+        method: id ? "PUT" : "POST",
+        body: JSON.stringify(p),
+      });
+      toast(
+        id
+          ? "Polimento atualizado com sucesso!"
+          : "Polimento cadastrado com sucesso!",
+      );
+      $("#modal").close();
+      loadDashboard();
+      if ($("#historico").classList.contains("active")) loadHistory();
+      if ($("#relatorio").classList.contains("active")) loadReport();
+    } catch (e) {
+      toast(e.message, true);
+    }
+  };
+  [
+    "period",
+    "filterCar",
+    "filterModel",
+    "filterColor",
+    "filterType",
+    "filterChassi",
+    "start",
+    "end",
+  ].forEach((id) =>
+    $("#" + id).addEventListener(
+      id === "filterChassi" ? "input" : "change",
+      () => {
+        let c = $("#filterCar").value;
+        if (id === "filterCar") {
+          options(
+            $("#filterModel"),
+            VEHICLES[c]?.models || [],
+            "Todos os modelos",
+          );
+          options($("#filterColor"), colorsFor(c), "Todas as cores");
+        }
+        if (id === "filterModel")
+          options(
+            $("#filterColor"),
+            colorsFor(c, $("#filterModel").value),
+            "Todas as cores",
+          );
+        loadHistory();
+      },
+    ),
+  );
+  $("#historyRows").onclick = async (e) => {
+    let b = e.target.closest("button");
+    if (!b) return;
+    let id = b.dataset.edit || b.dataset.view || b.dataset.delete,
+      r = all.find((x) => x.id == id);
+    if (b.dataset.edit) openForm(r);
+    else if (b.dataset.view)
+      alert(
+        `DETALHES\n\n${r.carro} — ${r.modelo}\nChassi: ${r.chassi}\nCor: ${r.cor}\nTipo: ${r.tipo_polimento}\nData: ${local(r.data)} ${r.hora}\n\nObservações: ${r.observacoes || "—"}\nResponsável: ${r.responsavel || "—"}`,
+      );
+    else if (
+      confirm(
+        "Excluir este registro de polimento? Esta ação não pode ser desfeita.",
+      )
+    )
+      try {
+        await api("/api/polimentos/" + id, { method: "DELETE" });
+        toast("Registro excluído.");
+        loadHistory();
+        loadDashboard();
+      } catch (e) {
+        toast(e.message, true);
+      }
+  };
+  $("#quickChassi").oninput = async (e) => {
+    let v = e.target.value.trim();
+    if (v.length < 2) return;
+    let rs = await api("/api/polimentos?chassi=" + encodeURIComponent(v));
+    $("#recentRows").innerHTML =
+      rs
+        .slice(0, 10)
+        .map(
+          (r) =>
+            `<tr><td>${local(r.data)}</td><td><b>${r.carro}</b><small> · ${r.modelo}</small></td><td>${r.chassi}</td><td><span class="badge ${r.tipo_polimento}">${r.tipo_polimento}</span></td></tr>`,
+        )
+        .join("") || '<tr><td colspan="4">Nenhum chassi encontrado.</td></tr>';
+  };
+  $("#quickClear").onclick = () => {
+    $("#quickChassi").value = "";
+    loadDashboard();
+  };
+  $("#reportMonth").onchange = loadReport;
+  $("#exportPdf").onclick = async () => {
+    let q = await loadReport();
+    window.open("/api/polimentos/export/pdf?" + query(q), "_blank");
+  };
+  $("#exportExcel").onclick = async () => {
+    let q = await loadReport();
+    window.location = "/api/polimentos/export/excel?" + query(q);
+  };
+  $("#copyReport").onclick = async () => {
+    let q = await loadReport(),
+      lines = ["RELATÓRIO DE POLIMENTOS", `Período: ${q.label}`, ""];
+    report.forEach((r, i) =>
+      lines.push(
+        `${i + 1}. ${r.carro} — ${r.modelo}\n   Chassi: ${r.chassi}\n   Cor: ${r.cor}\n   Polimento: ${r.tipo_polimento === "COMPLETO" ? "Completo" : "Parcial"}\n`,
+      ),
+    );
+    let c = report.filter((r) => r.tipo_polimento === "COMPLETO").length;
+    lines.push(
+      "---",
+      `TOTAL: ${report.length}`,
+      `COMPLETOS: ${c}`,
+      `PARCIAIS: ${report.length - c}`,
+    );
+    try {
+      await navigator.clipboard.writeText(lines.join("\n"));
+      toast("Relatório copiado para o WhatsApp!");
+    } catch {
+      toast("Não foi possível copiar.", true);
+    }
+  };
+  $("#restoreBtn").onclick = async () => {
+    let f = $("#restoreFile").files[0];
+    if (!f) return toast("Selecione um arquivo de backup.", true);
+    if (!confirm("Restaurar este backup e substituir os dados atuais?")) return;
+    let fd = new FormData();
+    fd.append("backup", f);
+    let r = await fetch("/api/restaurar", { method: "POST", body: fd }),
+      j = await r.json();
+    r.ok ? toast(j.warning) : toast(j.error, true);
+  };
+});

@@ -648,7 +648,21 @@ dialog form {
     color: #c23c3c
 }
 
+.mobile-logout {
+    display: none;
+}
+
 @media(max-width:800px) {
+
+    .mobile-logout {
+        display: block;
+        border: none;
+        background: transparent;
+        color: #ff5c5c;
+        font-weight: 700;
+        cursor: pointer;
+        padding: 8px;
+    }
 
     .grid {
         display: grid;
